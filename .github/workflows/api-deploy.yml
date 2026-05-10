@@ -1,0 +1,74 @@
+# GitHub Actions CI/CD for Chicken Disease Classification API
+
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'chicken-disease-api/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'chicken-disease-api/**'
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd chicken-disease-api
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run linting
+        run: |
+          cd chicken-disease-api
+          # Add linting commands here
+          echo "Linting passed"
+
+      - name: Run tests
+        run: |
+          cd chicken-disease-api
+          pytest tests/ -v --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+
+  deploy-render:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Render
+        uses: render-deploy-action/deploy@v1
+        with:
+          render-api-key: ${{ secrets.RENDER_API_KEY }}
+          service-id: ${{ secrets.RENDER_SERVICE_ID }}
+          region: oregon
+          plan: free

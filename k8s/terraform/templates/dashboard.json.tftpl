@@ -1,0 +1,171 @@
+{
+  "displayName": "MLOps Dashboard - ${prefix}",
+  "gridLayout": {
+    "columns": 3,
+    "widgets": [
+      {
+        "title": "Model Performance Overview",
+        "xPos": 0,
+        "yPos": 0,
+        "width": 3,
+        "height": 3,
+        "widget": {
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" metric.type=\"custom.googleapis.com/ml/model_accuracy\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Accuracy",
+              "scale": "LINEAR"
+            },
+            "legendPosition": "BOTTOM"
+          }
+        }
+      },
+      {
+        "title": "API Request Latency",
+        "xPos": 0,
+        "yPos": 3,
+        "width": 2,
+        "height": 3,
+        "widget": {
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" metric.type=\"custom.googleapis.com/ml/prediction_latency\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_PERCENTILE_95"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Latency (ms)",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "title": "Prediction Count",
+        "xPos": 2,
+        "yPos": 3,
+        "width": 1,
+        "height": 3,
+        "widget": {
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" metric.type=\"custom.googleapis.com/ml/prediction_count\"",
+                    "aggregation": {
+                      "alignmentPeriod": "300s",
+                      "perSeriesAligner": "ALIGN_SUM"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Count",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "title": "GPU Utilization",
+        "xPos": 0,
+        "yPos": 6,
+        "width": 2,
+        "height": 3,
+        "widget": {
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "filter": "resource.type=\"k8s_container\" metric.type=\"custom.googleapis.com/ml/gpu_utilization\"",
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "label": "Utilization %",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "title": "Model Drift Score",
+        "xPos": 2,
+        "yPos": 6,
+        "width": 1,
+        "height": 3,
+        "widget": {
+          "gaugeChart": {
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"k8s_container\" metric.type=\"custom.googleapis.com/ml/drift_score\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_MEAN"
+                }
+              }
+            },
+            "dimensions": [],
+            "GaugeView": {
+              "lowerBound": 0,
+              "upperBound": 1
+            }
+          }
+        }
+      },
+      {
+        "title": "Active Model Version",
+        "xPos": 0,
+        "yPos": 9,
+        "width": 1,
+        "height": 2,
+        "widget": {
+          "text": {
+            "content": "Currently serving: v1.0.0\nAccuracy: 94.5%\nLast updated: 2024-01-15",
+            "format": "MARKDOWN"
+          }
+        }
+      },
+      {
+        "title": "Alerts",
+        "xPos": 1,
+        "yPos": 9,
+        "width": 2,
+        "height": 2,
+        "widget": {
+          "alertChart": {
+            "conditionFilter": "severity >= WARNING"
+          }
+        }
+      }
+    ]
+  }
+}

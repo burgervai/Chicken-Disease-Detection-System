@@ -1,0 +1,39 @@
+services:
+  # Backend API
+  - type: web
+    name: chicken-disease-api
+    runtime: python
+    plan: starter
+    buildCommand: "cd chicken-disease-api && pip install -r requirements.txt"
+    startCommand: "cd chicken-disease-api && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: MONGODB_URL
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: chicken_disease
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://chicken-disease-ui.onrender.com
+    healthCheckPath: /health
+
+  # Frontend UI
+  - type: web
+    name: chicken-disease-ui
+    runtime: node
+    plan: starter
+    buildCommand: "cd chicken-disease-ui && npm install && npm run build"
+    startCommand: "cd chicken-disease-ui && npm run preview -- --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: VITE_API_URL
+        value: https://chicken-disease-api.onrender.com
+    healthCheckPath: /
+
+databases:
+  - name: chicken-disease-mongodb
+    databaseName: chicken_disease
+    user: admin

@@ -1,0 +1,34 @@
+# Render deployment configuration for frontend
+
+# Build command
+build_command: npm run build
+
+# Static site configuration
+static_site: true
+
+# Publish path
+publish_path: dist
+
+# Headers for caching
+headers:
+  - path: /*
+    headers:
+      - key: Cache-Control
+        value: public, max-age=0, must-revalidate
+  - path: /assets/*
+    headers:
+      - key: Cache-Control
+        value: public, max-age=31536000, immutable
+
+# Environment variables
+env_vars:
+  - key: VITE_API_URL
+    value: https://your-backend.onrender.com
+
+# Auto-deploy
+auto_deploy: true
+
+# Regions
+regions:
+  - oregon
+  - frankfurt

@@ -1,0 +1,76 @@
+# GitHub Actions CI/CD for Chicken Disease Classification UI
+
+name: Deploy UI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'chicken-disease-ui/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'chicken-disease-ui/**'
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: chicken-disease-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: chicken-disease-ui
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: chicken-disease-ui
+        run: npx tsc --noEmit
+
+      - name: Build
+        working-directory: chicken-disease-ui
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: chicken-disease-ui/dist
+
+  deploy-render:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: chicken-disease-ui/dist
+
+      - name: Deploy to Render
+        uses: render-deploy-action/deploy@v1
+        with:
+          render-api-key: ${{ secrets.RENDER_API_KEY }}
+          service-id: ${{ secrets.RENDER_UI_SERVICE_ID }}
+          region: oregon
+          plan: free
