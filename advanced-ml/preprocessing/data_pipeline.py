@@ -1,16 +1,4 @@
-"""
-Advanced Data Preprocessing Pipeline
 
-Features:
-- Image preprocessing with augmentation
-- Data validation and quality checks
-- Data versioning and lineage tracking
-- Handling class imbalance
-- Data pipeline monitoring
-
-Author: MiniMax Agent
-Version: 1.0.0
-"""
 
 import os
 import json
@@ -28,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DataQualityMetrics:
-    """Data quality metrics for validation"""
+
     total_images: int = 0
     valid_images: int = 0
     corrupted_images: int = 0
@@ -41,7 +29,7 @@ class DataQualityMetrics:
 
 @dataclass
 class DataVersion:
-    """Data version tracking"""
+ 
     version_id: str
     created_at: str
     checksum: str
@@ -56,10 +44,7 @@ class DataVersion:
 
 
 class ImagePreprocessor:
-    """
-    Advanced image preprocessing with validation,
-    augmentation, and standardization.
-    """
+    
 
     def __init__(
         self,
@@ -74,15 +59,7 @@ class ImagePreprocessor:
         self.std = np.array(std)
 
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Preprocess a single image.
-
-        Args:
-            image: Input image as numpy array
-
-        Returns:
-            Preprocessed image
-        """
+    
         # Resize
         from PIL import Image
         img = Image.fromarray(image.astype('uint8'))
@@ -113,13 +90,7 @@ class ImagePreprocessor:
 
 
 class DataAugmentor:
-    """
-    Advanced data augmentation with:
-    - Geometric transformations
-    - Color space adjustments
-    - Noise injection
-    - Cutout and mixing strategies
-    """
+   
 
     GEOMETRIC = "geometric"
     COLOR = "color"
@@ -145,16 +116,7 @@ class DataAugmentor:
         image: np.ndarray,
         augmentation_type: str = None
     ) -> np.ndarray:
-        """
-        Apply augmentation to a single image.
-
-        Args:
-            image: Input image
-            augmentation_type: Specific augmentation to apply
-
-        Returns:
-            Augmented image
-        """
+        
         import random
 
         if augmentation_type is None:
@@ -298,16 +260,7 @@ class DataAugmentor:
         images: List[np.ndarray],
         labels: List[int]
     ) -> Tuple[List[np.ndarray], List[int]]:
-        """
-        Augment an entire dataset.
-
-        Args:
-            images: List of images
-            labels: List of labels
-
-        Returns:
-            Augmented images and labels
-        """
+        
         augmented_images = []
         augmented_labels = []
 
@@ -326,13 +279,7 @@ class DataAugmentor:
 
 
 class ClassImbalanceHandler:
-    """
-    Handle class imbalance with multiple strategies:
-    - Oversampling (SMOTE, ADASYN)
-    - Undersampling
-    - Class weights
-    - Focal loss
-    """
+  
 
     OVERSAMPLE = "oversample"
     UNDERSAMPLE = "undersample"
@@ -347,16 +294,7 @@ class ClassImbalanceHandler:
         labels: List[int],
         method: str = "balanced"
     ) -> Dict[int, float]:
-        """
-        Compute class weights for imbalanced data.
-
-        Args:
-            labels: List of labels
-            method: Weight computation method
-
-        Returns:
-            Dictionary mapping class to weight
-        """
+       
         from sklearn.utils.class_weight import compute_class_weight
 
         unique_classes = np.unique(labels)
@@ -373,16 +311,7 @@ class ClassImbalanceHandler:
         images: List[np.ndarray],
         labels: List[int]
     ) -> Tuple[List[np.ndarray], List[int]]:
-        """
-        Undersample majority class.
-
-        Args:
-            images: List of images
-            labels: List of labels
-
-        Returns:
-            Undersampled images and labels
-        """
+        
         # Group by class
         class_indices = defaultdict(list)
         for idx, label in enumerate(labels):
@@ -408,16 +337,7 @@ class ClassImbalanceHandler:
         images: List[np.ndarray],
         labels: List[int]
     ) -> Tuple[List[np.ndarray], List[int]]:
-        """
-        Oversample minority class using SMOTE-like approach.
-
-        Args:
-            images: List of images
-            labels: List of labels
-
-        Returns:
-            Oversampled images and labels
-        """
+        
         # Group by class
         class_indices = defaultdict(list)
         for idx, label in enumerate(labels):
@@ -489,15 +409,7 @@ class DataValidator:
         self.allowed_formats = allowed_formats or ["jpg", "jpeg", "png", "bmp"]
 
     def validate_image(self, image: np.ndarray) -> Dict:
-        """
-        Validate a single image.
-
-        Args:
-            image: Image array
-
-        Returns:
-            Validation results
-        """
+       
         from PIL import Image
 
         results = {
@@ -627,8 +539,7 @@ class DataVersionManager:
         metadata: Dict = None
     ) -> DataVersion:
         """
-        Create a new data version.
-
+       
         Args:
             images: List of images
             labels: List of labels
