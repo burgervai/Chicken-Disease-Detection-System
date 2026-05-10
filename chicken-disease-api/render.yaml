@@ -1,34 +1,19 @@
-# Render deployment configuration
-
-# Build command for backend
-build_command_backend: pip install -r requirements.txt
-
-# Start command for backend
-start_command_backend: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-
-# Environment variables for backend
-env_vars_backend:
-  - key: MONGODB_URL
-    value: mongodb+srv://<username>:<password>@cluster.mongodb.net
-  - key: MONGODB_DB_NAME
-    value: chicken_disease
-  - key: SECRET_KEY
-    generate: random
-  - key: DEBUG
-    value: "false"
-  - key: CORS_ORIGINS
-    value: https://your-frontend.onrender.com
-
-# Health check endpoint
-health_check_path: /health
-
-# Plan type
-plan: free
-
-# Auto-deploy settings
-auto_deploy: true
-
-# Regions
-regions:
-  - oregon
-  - frankfurt
+services:
+  - type: web
+    name: chicken-disease-api
+    runtime: python
+    plan: free
+    buildCommand: "cd chicken-disease-api && pip install -r requirements.txt"
+    startCommand: "cd chicken-disease-api && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: MONGODB_URL
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: chicken_disease
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
