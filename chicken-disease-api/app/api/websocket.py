@@ -15,11 +15,7 @@ router = APIRouter()
 
 @router.websocket("/")
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
-    """
-    WebSocket endpoint for real-time notifications.
 
-    Connect to: ws://host/ws/?client_id=<your_client_id>
-    """
     if not client_id:
         client_id = str(uuid.uuid4())
 
