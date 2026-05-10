@@ -1,74 +1,136 @@
 """
-MongoDB database service
+PostgreSQL database service
 """
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from typing import Optional
+
 import structlog
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from app.core.config import settings
 
 logger = structlog.get_logger()
 
 
 class DatabaseService:
-    """MongoDB database service with async operations"""
+    """PostgreSQL database service with async SQLAlchemy operations"""
 
     def __init__(self):
-        self.client: Optional[AsyncIOMotorClient] = None
-        self.db: Optional[AsyncIOMotorDatabase] = None
+        self.engine: Optional[AsyncEngine] = None
+        self.session_factory: Optional[async_sessionmaker[AsyncSession]] = None
+
+    def _get_database_url(self) -> str:
+        """Convert Render PostgreSQL URL to asyncpg-compatible SQLAlchemy URL"""
+        database_url = settings.DATABASE_URL
+
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace(
+                "postgresql://",
+                "postgresql+asyncpg://",
+                1,
+            )
+
+        return database_url
 
     async def connect(self):
-        """Connect to MongoDB"""
-        logger.info("connecting_to_mongodb", url=settings.MONGODB_URL)
-        self.client = AsyncIOMotorClient(settings.MONGODB_URL)
-        self.db = self.client[settings.MONGODB_DB_NAME]
+        """Connect to PostgreSQL"""
+        logger.info("connecting_to_postgresql")
 
-        # Create indexes
-        await self._create_indexes()
-        logger.info("mongodb_connected", database=settings.MONGODB_DB_NAME)
+        self.engine = create_async_engine(
+            self._get_database_url(),
+            pool_pre_ping=True,
+            echo=settings.DEBUG,
+        )
+
+        self.session_factory = async_sessionmaker(
+            bind=self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+        async with self.engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+
+        await self._create_tables()
+
+        logger.info("postgresql_connected")
 
     async def disconnect(self):
-        """Disconnect from MongoDB"""
-        if self.client:
-            self.client.close()
-            logger.info("mongodb_disconnected")
+        """Disconnect from PostgreSQL"""
+        if self.engine:
+            await self.engine.dispose()
+            logger.info("postgresql_disconnected")
 
-    async def _create_indexes(self):
-        """Create database indexes for optimized queries"""
-        # Predictions collection indexes
-        await self.db.predictions.create_index("created_at")
-        await self.db.predictions.create_index("model_version")
-        await self.db.predictions.create_index("user_id")
-        await self.db.predictions.create_index([("user_id", 1), ("created_at", -1)])
+    async def _create_tables(self):
+        """Create basic tables if they do not exist"""
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS predictions (
+                        id SERIAL PRIMARY KEY,
+                        user_id VARCHAR(255),
+                        model_version VARCHAR(50),
+                        prediction VARCHAR(255),
+                        confidence FLOAT,
+                        image_path TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
 
-        # Model versions collection indexes
-        await self.db.model_versions.create_index("version", unique=True)
-        await self.db.model_versions.create_index("is_active")
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS model_versions (
+                        id SERIAL PRIMARY KEY,
+                        version VARCHAR(50) UNIQUE NOT NULL,
+                        is_active BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
 
-        # Users collection indexes
-        await self.db.users.create_index("email", unique=True)
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        email VARCHAR(255) UNIQUE NOT NULL,
+                        hashed_password TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
 
-        logger.info("database_indexes_created")
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id SERIAL PRIMARY KEY,
+                        level VARCHAR(50),
+                        message TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
 
-    @property
-    def predictions(self):
-        """Get predictions collection"""
-        return self.db.predictions
+        logger.info("database_tables_created")
 
-    @property
-    def model_versions(self):
-        """Get model_versions collection"""
-        return self.db.model_versions
-
-    @property
-    def users(self):
-        """Get users collection"""
-        return self.db.users
-
-    @property
-    def logs(self):
-        """Get logs collection"""
-        return self.db.logs
+    def get_session(self) -> AsyncSession:
+        """Get a database session"""
+        if not self.session_factory:
+            raise RuntimeError("Database is not connected")
+        return self.session_factory()
 
 
-# Global database service instance
 db_service = DatabaseService()
