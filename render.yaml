@@ -16,22 +16,8 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://chicken-disease-ui.onrender.com
+        value: https://your-vercel-domain.vercel.app
     healthCheckPath: /health
-
-  # Frontend UI
-  - type: web
-    name: chicken-disease-ui
-    runtime: node
-    plan: starter
-    buildCommand: "cd chicken-disease-ui && npm install && npm run build"
-    startCommand: "cd chicken-disease-ui && npm run preview -- --host 0.0.0.0 --port $PORT"
-    envVars:
-      - key: NODE_VERSION
-        value: 20
-      - key: VITE_API_URL
-        value: https://chicken-disease-api.onrender.com
-    healthCheckPath: /
 
 databases:
   - name: chicken-disease-mongodb
