@@ -38,10 +38,16 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    logger.info("application_starting", app_name=settings.APP_NAME, version=settings.APP_VERSION)
+    logger.info(
+        "application_starting",
+        app_name=settings.APP_NAME,
+        version=settings.APP_VERSION,
+    )
 
+    # Keep lightweight services only during startup.
+    # Do NOT load TensorFlow/Keras model here on Render Free,
+    # because it can exceed the 512 MB memory limit before the app opens a port.
     await db_service.connect()
-    await model_registry.initialize()
     await notification_service.start()
 
     logger.info("application_ready")
@@ -49,6 +55,7 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("application_shutting_down")
+
     await notification_service.stop()
     await db_service.disconnect()
 
@@ -56,7 +63,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Production-ready API for Chicken Disease Classification with multi-model support",
+    description="Production-ready API for Chicken Disease Classification with lazy model loading",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     lifespan=lifespan,
@@ -82,6 +89,7 @@ async def health_check():
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "models_loaded": model_registry.get_loaded_models_count(),
+        "lazy_model_loading": True,
     }
 
 
@@ -92,4 +100,5 @@ async def root():
         "message": "Welcome to Chicken Disease Classification API",
         "version": settings.APP_VERSION,
         "docs": "/docs",
+        "model_loading": "lazy",
     }
