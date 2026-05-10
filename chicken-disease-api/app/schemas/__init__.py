@@ -25,7 +25,7 @@ class ModelStatus(str, Enum):
     UNLOADED = "unloaded"
 
 
-# ============ User Schemas ============
+
 
 class UserBase(BaseModel):
     """Base user schema"""
@@ -48,7 +48,7 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
-# ============ Auth Schemas ============
+
 
 class LoginRequest(BaseModel):
     """Login request schema"""
@@ -63,7 +63,7 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-# ============ Prediction Schemas ============
+
 
 class PredictionRequest(BaseModel):
     """Prediction request schema"""
@@ -97,7 +97,6 @@ class PredictionHistoryResponse(BaseModel):
     total_pages: int
 
 
-# ============ Model Schemas ============
 
 class ModelInfo(BaseModel):
     """Model information schema"""
@@ -139,7 +138,6 @@ class NotificationPayload(BaseModel):
     prediction_id: Optional[str] = None
 
 
-# ============ Error Schemas ============
 
 class ErrorResponse(BaseModel):
     """Error response schema"""
