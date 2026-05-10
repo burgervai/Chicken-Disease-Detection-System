@@ -1,11 +1,12 @@
 """
 Application configuration settings
 """
-from pydantic_settings import BaseSettings
-from pydantic import field_validator
-from typing import List
 from functools import lru_cache
+from typing import List
 import json
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -19,25 +20,22 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
-    
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS_ORIGINS from string or list"""
         if isinstance(v, str):
-            # Try to parse as JSON if it looks like a list
             if v.startswith("["):
                 try:
                     return json.loads(v)
                 except json.JSONDecodeError:
                     pass
-            # Otherwise treat as a single URL
             return [v]
         return v
 
-    # MongoDB
-    MONGODB_URL: str = "mongodb://localhost:27017"
-    MONGODB_DB_NAME: str = "chicken_disease"
+    # PostgreSQL
+    DATABASE_URL: str
 
     # Security
     SECRET_KEY: str = "change-me-in-production"
@@ -52,7 +50,7 @@ class Settings(BaseSettings):
 
     # File Storage
     UPLOAD_DIR: str = "./uploads"
-    MAX_UPLOAD_SIZE: int = 10485760  # 10MB
+    MAX_UPLOAD_SIZE: int = 10485760
     ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png"]
 
     # Rate Limiting
