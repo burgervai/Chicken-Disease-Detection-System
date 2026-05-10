@@ -1,16 +1,4 @@
-"""
-Advanced Model Training Pipeline
 
-Features:
-- Automated hyperparameter tuning with Optuna
-- Early stopping and learning rate scheduling
-- Experiment tracking with MLflow/W&B
-- Multi-GPU training support
-- Distributed training ready
-
-Author: MiniMax Agent
-Version: 1.0.0
-"""
 
 import os
 import json
@@ -110,9 +98,7 @@ class TrainingResult:
 
 
 class CNNBuilder:
-    """
-    Modular CNN architecture builder with multiple backbone options.
-    """
+   
 
     BACKBONE_RESNET = "resnet50"
     BACKBONE_EFFICIENTNET = "efficientnet_b0"
@@ -152,15 +138,7 @@ class CNNBuilder:
         dense_units: int = 512,
         dropout_rate: float = 0.5
     ) -> Any:
-        """
-        Build custom CNN architecture.
-
-        Architecture:
-        - Conv2D layers with increasing filters
-        - Batch normalization
-        - MaxPooling
-        - Dense layers with dropout
-        """
+     
         if conv_filters is None:
             conv_filters = [32, 64, 128, 256]
 
@@ -427,11 +405,7 @@ class HyperparameterTuner:
 
 
 class ExperimentTracker:
-    """
-    Experiment tracking and logging.
-    Supports MLflow, Weights & Biases, or local file storage.
-    """
-
+  
     def __init__(
         self,
         experiment_name: str = "chicken_disease_classification",
@@ -888,7 +862,7 @@ class TrainingPipeline:
         )
 
 
-# Example usage
+
 if __name__ == "__main__":
     # Create config
     config = TrainingConfig(
@@ -900,7 +874,7 @@ if __name__ == "__main__":
         learning_rate=0.001,
     )
 
-    # Create pipeline
+
     pipeline = TrainingPipeline(config)
 
     # Simulate data
