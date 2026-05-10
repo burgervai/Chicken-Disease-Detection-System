@@ -1,6 +1,4 @@
-"""
-Production-ready FastAPI application for Chicken Disease Classification
-"""
+
 from contextlib import asynccontextmanager
 
 import structlog
@@ -44,9 +42,6 @@ async def lifespan(app: FastAPI):
         version=settings.APP_VERSION,
     )
 
-    # Keep lightweight services only during startup.
-    # Do NOT load TensorFlow/Keras model here on Render Free,
-    # because it can exceed the 512 MB memory limit before the app opens a port.
     await db_service.connect()
     await notification_service.start()
 
