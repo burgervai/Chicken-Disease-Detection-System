@@ -1,27 +1,42 @@
 """
 API endpoints router
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from typing import Optional, List
-from datetime import datetime
+import base64
+import hashlib
+import json
 import uuid
+from datetime import datetime
+from typing import List, Optional
+
+import structlog
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy import text
 
 from app.schemas import (
-    PredictionRequest,
+    ModelInfo,
+    PredictionHistoryResponse,
     PredictionResponse,
     PredictionResult,
-    PredictionHistoryResponse,
-    ModelInfo,
-    ErrorResponse,
 )
-from app.services.model_registry import model_registry
 from app.services.database import db_service
+from app.services.model_registry import model_registry
 from app.services.notification import notification_service
-import structlog
 
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def hash_image(data: bytes) -> str:
+    """Generate hash for image data."""
+    return hashlib.md5(data).hexdigest()
+
+
+def normalize_disease(value):
+    """Convert enum/string disease values into plain strings for storage."""
+    if hasattr(value, "value"):
+        return value.value
+    return str(value)
 
 
 @router.post("/predict", response_model=PredictionResponse)
@@ -33,12 +48,11 @@ async def predict_disease(
     """
     Predict disease from chicken fecal image.
 
-    - **image**: Image file (jpg, jpeg, png)
-    - **model_version**: Optional specific model version to use
-    - **threshold**: Confidence threshold (0.0 - 1.0)
+    - image: Image file, jpg/jpeg/png
+    - model_version: Optional specific model version
+    - threshold: Confidence threshold
     """
     try:
-        # Validate file
         if not image.filename:
             raise HTTPException(status_code=400, detail="No file provided")
 
@@ -46,20 +60,15 @@ async def predict_disease(
         if file_ext not in ["jpg", "jpeg", "png"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid file type. Allowed: jpg, jpeg, png",
+                detail="Invalid file type. Allowed: jpg, jpeg, png",
             )
 
-        # Read image data
         contents = await image.read()
 
-        # Validate file size
-        if len(contents) > 10 * 1024 * 1024:  # 10MB
-            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large. Max 10MB")
 
-        # Run prediction
-        import base64
-
-        image_b64 = base64.b64encode(contents).decode()
+        image_b64 = base64.b64encode(contents).decode("utf-8")
         start_time = datetime.utcnow()
 
         result = await model_registry.predict(
@@ -70,56 +79,86 @@ async def predict_disease(
 
         processing_time = (datetime.utcnow() - start_time).total_seconds() * 1000
 
-        # Create prediction record
         prediction_id = str(uuid.uuid4())
-        prediction_record = {
-            "_id": prediction_id,
-            "image_hash": hash_image(contents),
-            "result": {
-                "disease": result["disease"],
-                "confidence": result["confidence"],
-                "probabilities": result["probabilities"],
-            },
-            "model_version": model_version or model_registry.active_model,
-            "processing_time_ms": processing_time,
-            "threshold": threshold,
-            "created_at": datetime.utcnow(),
-            "websocket_sent": False,
+        disease = normalize_disease(result["disease"])
+        active_model_version = model_version or model_registry.active_model or "unknown"
+
+        probabilities = {
+            str(key): float(value)
+            for key, value in result["probabilities"].items()
         }
 
-        # Store prediction in database
-        await db_service.predictions.insert_one(prediction_record)
+        async with db_service.get_session() as session:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO predictions (
+                        id,
+                        image_hash,
+                        disease,
+                        confidence,
+                        probabilities,
+                        model_version,
+                        processing_time_ms,
+                        threshold,
+                        created_at,
+                        websocket_sent
+                    )
+                    VALUES (
+                        :id,
+                        :image_hash,
+                        :disease,
+                        :confidence,
+                        CAST(:probabilities AS JSONB),
+                        :model_version,
+                        :processing_time_ms,
+                        :threshold,
+                        :created_at,
+                        :websocket_sent
+                    )
+                    """
+                ),
+                {
+                    "id": prediction_id,
+                    "image_hash": hash_image(contents),
+                    "disease": disease,
+                    "confidence": float(result["confidence"]),
+                    "probabilities": json.dumps(probabilities),
+                    "model_version": active_model_version,
+                    "processing_time_ms": float(
+                        result.get("inference_time_ms", processing_time)
+                    ),
+                    "threshold": float(threshold),
+                    "created_at": datetime.utcnow(),
+                    "websocket_sent": False,
+                },
+            )
+            await session.commit()
 
         logger.info(
             "prediction_completed",
             prediction_id=prediction_id,
-            disease=result["disease"],
+            disease=disease,
             confidence=result["confidence"],
         )
 
         return PredictionResponse(
             id=prediction_id,
             result=PredictionResult(
-                disease=result["disease"],
-                confidence=result["confidence"],
-                probabilities=result["probabilities"],
+                disease=disease,
+                confidence=float(result["confidence"]),
+                probabilities=probabilities,
             ),
-            model_version=model_version or model_registry.active_model,
-            processing_time_ms=result.get("inference_time_ms", processing_time),
+            model_version=active_model_version,
+            processing_time_ms=float(result.get("inference_time_ms", processing_time)),
             created_at=datetime.utcnow(),
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("prediction_failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Prediction failed")
-
-
-def hash_image(data: bytes) -> str:
-    """Generate hash for image data"""
-    import hashlib
-    return hashlib.md5(data).hexdigest()
+        logger.error("prediction_failed", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.get("/predictions/history", response_model=PredictionHistoryResponse)
@@ -128,49 +167,100 @@ async def get_prediction_history(
     page_size: int = Query(10, ge=1, le=100),
     model_version: Optional[str] = None,
 ):
-    """
-    Get prediction history with pagination.
-
-    - **page**: Page number (starts at 1)
-    - **page_size**: Number of predictions per page (max 100)
-    - **model_version**: Filter by model version (optional)
-    """
+    """Get prediction history with pagination."""
     try:
-        # Build query
-        query = {}
-        if model_version:
-            query["model_version"] = model_version
+        offset = (page - 1) * page_size
 
-        # Get total count
-        total = await db_service.predictions.count_documents(query)
+        async with db_service.get_session() as session:
+            if model_version:
+                total_result = await session.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM predictions
+                        WHERE model_version = :model_version
+                        """
+                    ),
+                    {"model_version": model_version},
+                )
 
-        # Calculate pagination
-        skip = (page - 1) * page_size
+                rows_result = await session.execute(
+                    text(
+                        """
+                        SELECT
+                            id,
+                            disease,
+                            confidence,
+                            probabilities,
+                            model_version,
+                            processing_time_ms,
+                            created_at
+                        FROM predictions
+                        WHERE model_version = :model_version
+                        ORDER BY created_at DESC
+                        LIMIT :limit OFFSET :offset
+                        """
+                    ),
+                    {
+                        "model_version": model_version,
+                        "limit": page_size,
+                        "offset": offset,
+                    },
+                )
+            else:
+                total_result = await session.execute(
+                    text("SELECT COUNT(*) FROM predictions")
+                )
+
+                rows_result = await session.execute(
+                    text(
+                        """
+                        SELECT
+                            id,
+                            disease,
+                            confidence,
+                            probabilities,
+                            model_version,
+                            processing_time_ms,
+                            created_at
+                        FROM predictions
+                        ORDER BY created_at DESC
+                        LIMIT :limit OFFSET :offset
+                        """
+                    ),
+                    {
+                        "limit": page_size,
+                        "offset": offset,
+                    },
+                )
+
+            total = int(total_result.scalar() or 0)
+            rows = rows_result.mappings().all()
+
         total_pages = (total + page_size - 1) // page_size
 
-        # Get predictions
-        cursor = db_service.predictions.find(query).sort("created_at", -1).skip(skip).limit(page_size)
-        predictions = await cursor.to_list(length=page_size)
+        predictions = []
+        for row in rows:
+            probabilities = row["probabilities"] or {}
+            if isinstance(probabilities, str):
+                probabilities = json.loads(probabilities)
 
-        # Format response
-        formatted_predictions = []
-        for pred in predictions:
-            formatted_predictions.append(
+            predictions.append(
                 PredictionResponse(
-                    id=str(pred["_id"]),
+                    id=str(row["id"]),
                     result=PredictionResult(
-                        disease=pred["result"]["disease"],
-                        confidence=pred["result"]["confidence"],
-                        probabilities=pred["result"]["probabilities"],
+                        disease=row["disease"],
+                        confidence=float(row["confidence"]),
+                        probabilities=probabilities,
                     ),
-                    model_version=pred["model_version"],
-                    processing_time_ms=pred["processing_time_ms"],
-                    created_at=pred["created_at"],
+                    model_version=row["model_version"],
+                    processing_time_ms=float(row["processing_time_ms"]),
+                    created_at=row["created_at"],
                 )
             )
 
         return PredictionHistoryResponse(
-            predictions=formatted_predictions,
+            predictions=predictions,
             total=total,
             page=page,
             page_size=page_size,
@@ -178,41 +268,65 @@ async def get_prediction_history(
         )
 
     except Exception as e:
-        logger.error("history_fetch_failed", error=str(e))
+        logger.error("history_fetch_failed", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch prediction history")
 
 
-@router.get("/predictions/{prediction_id}")
+@router.get("/predictions/{prediction_id}", response_model=PredictionResponse)
 async def get_prediction(prediction_id: str):
-    """Get a specific prediction by ID"""
+    """Get a specific prediction by ID."""
     try:
-        prediction = await db_service.predictions.find_one({"_id": prediction_id})
+        async with db_service.get_session() as session:
+            result = await session.execute(
+                text(
+                    """
+                    SELECT
+                        id,
+                        disease,
+                        confidence,
+                        probabilities,
+                        model_version,
+                        processing_time_ms,
+                        created_at
+                    FROM predictions
+                    WHERE id = :id
+                    """
+                ),
+                {"id": prediction_id},
+            )
 
-        if not prediction:
+            row = result.mappings().first()
+
+        if not row:
             raise HTTPException(status_code=404, detail="Prediction not found")
 
+        probabilities = row["probabilities"] or {}
+        if isinstance(probabilities, str):
+            probabilities = json.loads(probabilities)
+
         return PredictionResponse(
-            id=str(prediction["_id"]),
+            id=str(row["id"]),
             result=PredictionResult(
-                disease=prediction["result"]["disease"],
-                confidence=prediction["result"]["confidence"],
-                probabilities=prediction["result"]["probabilities"],
+                disease=row["disease"],
+                confidence=float(row["confidence"]),
+                probabilities=probabilities,
             ),
-            model_version=prediction["model_version"],
-            processing_time_ms=prediction["processing_time_ms"],
-            created_at=prediction["created_at"],
+            model_version=row["model_version"],
+            processing_time_ms=float(row["processing_time_ms"]),
+            created_at=row["created_at"],
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("prediction_fetch_failed", error=str(e))
+        logger.error("prediction_fetch_failed", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch prediction")
 
 
 @router.get("/models", response_model=List[ModelInfo])
 async def list_models():
-    """List all available model versions"""
+    """List all available model versions."""
+    await model_registry.initialize()
     models = model_registry.get_available_models()
 
     return [
@@ -224,8 +338,8 @@ async def list_models():
             precision=model["metrics"].get("precision", 0),
             recall=model["metrics"].get("recall", 0),
             f1_score=model["metrics"].get("f1_score", 0),
-            training_date=datetime.utcnow(),  # Placeholder
-            dataset_size=0,  # Placeholder
+            training_date=datetime.utcnow(),
+            dataset_size=0,
             classes=["healthy", "coccidiosis"],
             is_active=(model["version"] == model_registry.active_model),
             status=model["status"],
@@ -236,7 +350,8 @@ async def list_models():
 
 @router.get("/models/active")
 async def get_active_model():
-    """Get information about the currently active model"""
+    """Get information about the active model."""
+    await model_registry.initialize()
     model_info = model_registry.get_active_model_info()
 
     if not model_info:
@@ -260,59 +375,69 @@ async def get_active_model():
 
 @router.post("/models/{version}/activate")
 async def activate_model(version: str):
-    """Activate a specific model version"""
+    """Activate a specific model version lazily."""
     try:
         await model_registry.activate_model(version)
-
-        # Notify all connected clients
         await notification_service.send_model_update_notification(version, "activated")
 
-        return {"message": f"Model {version} activated successfully"}
+        return {
+            "message": f"Model {version} activated successfully",
+            "lazy_loading": True,
+        }
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error("model_activation_failed", version=version, error=str(e))
+        logger.error("model_activation_failed", version=version, error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to activate model")
 
 
 @router.get("/statistics")
 async def get_statistics():
-    """Get prediction statistics"""
+    """Get prediction statistics."""
     try:
-        total_predictions = await db_service.predictions.count_documents({})
+        async with db_service.get_session() as session:
+            total_result = await session.execute(
+                text("SELECT COUNT(*) FROM predictions")
+            )
 
-        # Get predictions by result
-        pipeline = [
-            {
-                "$group": {
-                    "_id": "$result.disease",
-                    "count": {"$sum": 1},
-                }
-            }
-        ]
-        cursor = db_service.predictions.aggregate(pipeline)
-        result_counts = await cursor.to_list(length=100)
+            result_counts_result = await session.execute(
+                text(
+                    """
+                    SELECT disease, COUNT(*) AS count
+                    FROM predictions
+                    GROUP BY disease
+                    """
+                )
+            )
 
-        # Get predictions by model
-        model_pipeline = [
-            {
-                "$group": {
-                    "_id": "$model_version",
-                    "count": {"$sum": 1},
-                }
-            }
-        ]
-        model_cursor = db_service.predictions.aggregate(model_pipeline)
-        model_counts = await model_cursor.to_list(length=100)
+            model_counts_result = await session.execute(
+                text(
+                    """
+                    SELECT model_version, COUNT(*) AS count
+                    FROM predictions
+                    GROUP BY model_version
+                    """
+                )
+            )
+
+            total_predictions = int(total_result.scalar() or 0)
+            result_counts = result_counts_result.mappings().all()
+            model_counts = model_counts_result.mappings().all()
 
         return {
             "total_predictions": total_predictions,
-            "predictions_by_result": {rc["_id"]: rc["count"] for rc in result_counts},
-            "predictions_by_model": {mc["_id"]: mc["count"] for mc in model_counts},
+            "predictions_by_result": {
+                row["disease"]: row["count"]
+                for row in result_counts
+            },
+            "predictions_by_model": {
+                row["model_version"]: row["count"]
+                for row in model_counts
+            },
             "models_loaded": model_registry.get_loaded_models_count(),
         }
 
     except Exception as e:
-        logger.error("statistics_fetch_failed", error=str(e))
+        logger.error("statistics_fetch_failed", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch statistics")
