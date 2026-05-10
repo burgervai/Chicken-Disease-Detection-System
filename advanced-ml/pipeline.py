@@ -1,17 +1,4 @@
-"""
-Advanced ML Pipeline for Chicken Disease Classification
 
-This module provides a production-ready ML pipeline with:
-- Ensemble model support (stacking, voting, boosting)
-- Data augmentation and preprocessing
-- Model versioning with metadata tracking
-- Performance monitoring and drift detection
-- Batch prediction support
-- Model comparison and A/B testing
-
-Author: MiniMax Agent
-Version: 1.0.0
-"""
 
 import os
 import json
@@ -124,7 +111,7 @@ class EnsembleConfig:
 
 
 class DataAugmentationConfig:
-    """Configuration for data augmentation"""
+
 
     def __init__(
         self,
@@ -155,7 +142,7 @@ class DataAugmentationConfig:
 
 
 class HyperparameterConfig:
-    """Configuration for hyperparameter tuning"""
+   
 
     OPTUNA_SAMPLER = "optuna"
     GRID_SEARCH = "grid_search"
@@ -216,11 +203,7 @@ class HyperparameterConfig:
 
 
 class ModelRegistry:
-    """
-    Production-ready model registry with versioning, metadata tracking,
-    and model lifecycle management.
-    """
-
+   
     def __init__(self, registry_path: str = "models/registry"):
         self.registry_path = Path(registry_path)
         self.registry_path.mkdir(parents=True, exist_ok=True)
@@ -402,11 +385,7 @@ class ModelRegistry:
 
 
 class ModelMonitor:
-    """
-    Production model monitoring with drift detection,
-    performance tracking, and alerting.
-    """
-
+    
     def __init__(self, window_size: int = 1000):
         self.window_size = window_size
         self.predictions_buffer: List[Dict] = []
@@ -862,12 +841,7 @@ class ModelComparison:
 
 
 class ModelOptimizer:
-    """
-    Model optimization utilities including:
-    - Model compression (pruning, quantization)
-    - Inference optimization (TF-Lite, ONNX)
-    - Performance tuning
-    """
+  
 
     @staticmethod
     def quantize_model(
@@ -1023,7 +997,7 @@ def create_advanced_pipeline(config: Dict = None) -> Dict:
     }
 
 
-# Example usage
+
 if __name__ == "__main__":
     # Create pipeline
     pipeline = create_advanced_pipeline({
@@ -1046,7 +1020,7 @@ if __name__ == "__main__":
         }
     )
 
-    # Set as production
+
     pipeline["model_registry"].set_production(metadata.model_id)
 
     # Get monitoring report
